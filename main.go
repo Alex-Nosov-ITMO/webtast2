@@ -2,58 +2,48 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
-	"os"
-
-	"github.com/gorilla/mux"
 )
 
 type Response struct {
-	Login string `json:"login"`
+	Message  string `json:"message"`
+	XResult  string `json:"x-result"`
+	XBody    string `json:"x-body"`
+}
+
+func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "x-test,ngrok-skip-browser-warning,Content-Type,Accept,Access-Control-Allow-Headers")
+		
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		handler(w, r)
+	}
+}
+
+func resultHandler(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	response := Response{
+		Message: "nossovv",
+		XResult: r.Header.Get("x-test"),
+		XBody:   string(body),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/login", loginHandler)
-
-	router.HandleFunc("/id/{N}", nHandler)
-
-	port := "5000"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
-
-	log.Printf("Сервер запущен на порту %s", port)
-
-	err := http.ListenAndServe(":"+port, router)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("nossovv"))
-}
-
-func nHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	n := vars["N"]
-	res, err := http.Get("https://nd.kodaktor.ru/users/" + n)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	var resp Response
-	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	w.Write([]byte(resp.Login))
+	http.HandleFunc("/result4/", enableCORS(resultHandler))
+	log.Printf("Server starting on http://0.0.0.0:5000")
+	log.Fatal(http.ListenAndServe("0.0.0.0:5000", nil))
 }
